@@ -145,25 +145,35 @@ jobs:
           set -euo pipefail
           git fetch origin --prune
 
+          # 항상 최신 main을 베이스로 시작
+          git checkout -B tmp/adr-base origin/main
+          
+          # 작업 브랜치 만들기/갱신
           if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-            echo "Remote branch exists; checkout tracking branch"
             git checkout -B "$BRANCH" "origin/$BRANCH"
+            git rebase --rebase-merges --onto origin/main "$(git merge-base origin/main "$BRANCH")" "$BRANCH" || true
           else
-            echo "Creating new branch $BRANCH"
-            git checkout -b "$BRANCH"
+            git checkout -B "$BRANCH" origin/main
           fi
+
+          # 혹시 스테이징되어 있을지 모를 워크플로 변경 제거(보수적)
+          git restore --staged .github/workflows || true
+          git checkout -- .github/workflows || true
 
           mkdir -p "$(dirname "$FILENAME")"
           printf "%s" "$CONTENT" > "$FILENAME"
-          git add "$FILENAME"
 
+          # 상태 확인(디버그)
+          git status --porcelain
+
+          git add "$FILENAME"
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # 커밋할 변경이 없으면 넘어감
+          # 변경 없으면 커밋 생략
           git diff --cached --quiet || git commit -m "chore(adr): add/update ${FILENAME}"
 
-          # 먼저 일반 푸시, 실패하면 안전 강제 푸시로 폴백
+          # 기본 푸시 → 실패 시 with-lease로 폴백
           git push --set-upstream origin "$BRANCH" || git push --force-with-lease origin "$BRANCH"
 
       - name: Open PR
