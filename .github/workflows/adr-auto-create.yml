@@ -9,6 +9,11 @@ permissions:
   pull-requests: write
   issues: read
 
+concurrency:
+  group: adr-create-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+
 jobs:
   create-adr-md:
     if: github.event.label.name == 'adr:accepted'
