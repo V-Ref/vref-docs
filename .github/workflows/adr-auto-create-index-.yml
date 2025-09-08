@@ -1,0 +1,63 @@
+name: ADR Index Rebuild
+
+on:
+  push:
+    paths:
+      - 'docs/adr/**/*.md'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: adr-index-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rebuild-index:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build index
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          INDEX="docs/adr/index.md"
+          echo "# ADR Index" > "$INDEX"
+          echo "" >> "$INDEX"
+
+          TMP="$(mktemp)"
+          while IFS= read -r -d '' f; do
+            title="$(sed -n '1{s/^# //;p;q;}' "$f")"
+            status="$(grep -m1 -E '^\- \*\*Status\*\*:\s*' "$f" | sed -E 's/^- \*\*Status\*\*:\s*//;s/\r//')"
+            [[ -z "$status" ]] && status="(unknown)"
+            printf '%s|%s|%s\n' "$f" "$title" "$status" >> "$TMP"
+          done < <(find docs/adr -type f -name '*.md' ! -name 'index.md' -print0)
+
+          {
+            echo "## Active (Accepted)"
+            echo ""
+            awk -F '|' '$3 == "Accepted" { printf "- [%s](%s)\n", $2, $1 }' "$TMP" | sort || true
+            awk -F '|' '$3 == "Accepted"' "$TMP" | grep -q . || echo "- (none)"
+            echo ""
+            echo "## Proposed"
+            echo ""
+            awk -F '|' '$3 == "Proposed" { printf "- [%s](%s) — Status: %s\n", $2, $1, $3 }' "$TMP" | sort || true
+            awk -F '|' '$3 == "Proposed"' "$TMP" | grep -q . || echo "- (none)"
+            echo ""
+            echo "## Archived (Suspended / Superseded / Deprecated)"
+            echo ""
+            awk -F '|' '$3 ~ /^(Suspended|Superseded|Deprecated)$/ { printf "- [%s](%s) — Status: %s\n", $2, $1, $3 }' "$TMP" | sort || true
+            awk -F '|' '$3 ~ /^(Suspended|Superseded|Deprecated)$/' "$TMP" | grep -q . || echo "- (none)"
+            echo ""
+          } >> "$INDEX"
+
+      - name: Commit index (if changed)
+        run: |
+          git add docs/adr/index.md
+          git diff --cached --quiet && exit 0
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(adr): rebuild index"
+          git push

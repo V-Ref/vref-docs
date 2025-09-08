@@ -1,0 +1,153 @@
+name: ADR Auto Create from Issue
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+
+jobs:
+  create-adr-md:
+    if: github.event.label.name == 'adr:accepted'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract issue fields
+        id: x
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const rawTitle = issue.title || "";
+            const title = rawTitle.replace(/^ADR:\s*/i, '').trim();
+            const number = issue.number;
+            const body = issue.body || "";
+
+            // helper: extract block under "### <heading>"
+            function extractField(heading) {
+              const re = new RegExp(String.raw`(?<=^###\\s+${heading}\\s*$)\\n([\\s\\S]*?)(?:\\n###\\s|$)`, 'm');
+              const m = body.match(re);
+              return m ? m[1].trim() : "";
+            }
+
+            // ---- pick fields (Korean headings must match Issue Form)
+            const H = {
+              summary: "요약 (Summary)",
+              storage: "저장 위치 (Storage Path)",
+              scope: "적용 범위 (Scope)",
+              related: "관련 레포/이슈/PR",
+              context: "Context (배경/문제 정의)",
+              decision: "Decision (결정 사항)",
+              consequences: "Consequences (결과/파급효과)",
+              alternatives: "Alternatives Considered (대안)",
+              validation: "검증/지침 연계 (Validation)",
+              deciders: "Deciders / Reviewers"
+            };
+
+            const summary = extractField(H.summary) || title || "(no title)";
+            let storagePath = extractField(H.storage) || "org";
+            storagePath = storagePath.split("\n").map(s=>s.trim()).filter(Boolean)[0] || "org";
+            const scope = extractField(H.scope);
+            const related = extractField(H.related);
+            const contextSec = extractField(H.context);
+            const decisionSec = extractField(H.decision);
+            const consequencesSec = extractField(H.consequences);
+            const alternativesSec = extractField(H.alternatives);
+            const validationSec = extractField(H.validation);
+            const decidersSec = extractField(H.deciders);
+
+            // ---- directory & id prefix
+            const mapDir = (v) => {
+              switch (v) {
+                case 'org': return { dir: 'docs/adr/org', idPrefix: 'O-ADR' };
+                case 'vref-be': return { dir: 'docs/adr/repos/vref-be', idPrefix: 'R-ADR-vref-be' };
+                case 'vref-fe': return { dir: 'docs/adr/repos/vref-fe', idPrefix: 'R-ADR-vref-fe' };
+                case 'vref-config': return { dir: 'docs/adr/repos/vref-config', idPrefix: 'R-ADR-vref-config' };
+                case 'vref-infra': return { dir: 'docs/adr/repos/vref-infra', idPrefix: 'R-ADR-vref-infra' };
+                case 'etc': return { dir: 'docs/adr/repos/etc', idPrefix: 'R-ADR-etc' };
+                default: return { dir: 'docs/adr/org', idPrefix: 'O-ADR' };
+              }
+            };
+            const { dir, idPrefix } = mapDir(storagePath);
+
+            // ---- slug
+            const slug = (summary || `${storagePath}-proposal`)
+              .toLowerCase()
+              .replace(/[^a-z0-9가-힣\s-]/g, '')
+              .replace(/\s+/g, '-')
+              .replace(/-+/g, '-')
+              .replace(/^-|-$/g, '')
+              .slice(0, 80) || 'proposal';
+
+            // ---- id / filename
+            const now = new Date();
+            const year = now.getFullYear();
+            const date = now.toISOString().slice(0,10);
+            const adrId = `${idPrefix}-${year}-${String(number).padStart(4,'0')}`;
+            const filename = `${dir}/${adrId}-${slug}.md`;
+
+            const md = `# ${adrId}: ${summary}
+  
+              - **Status**: Accepted
+              - **Date**: ${date}
+              - **Deciders**: ${decidersSec || '(edit me)'}
+              - **Discussion**: #${number}
+              - **Scope**: ${storagePath === 'org' ? 'Org' : 'Repo'}
+              - **Related**: ${related || '-'}
+            
+              ## Context
+              ${contextSec || '(add details from the issue if missing)'}
+              
+              ## Decision
+              ${decisionSec || '(fill in the chosen option and rationale)'}
+              
+              ## Consequences
+              ${consequencesSec || `- Positive:\n- Negative:`}
+              
+              ## Alternatives Considered
+              ${alternativesSec || '(list non-chosen options with reasons)'}
+              
+              ## Validation / Project Guidelines
+              ${validationSec || '(DoR/DoD, quality gates, guideline links)'}
+              `;
+
+
+            core.setOutput('filename', filename);
+            core.setOutput('content', md);
+            core.setOutput('branch', `adr/${adrId}`);
+
+      - name: Create branch & commit
+        env:
+          FILENAME: ${{ steps.x.outputs.filename }}
+          CONTENT: ${{ steps.x.outputs.content }}
+          BRANCH:   ${{ steps.x.outputs.branch }}
+        run: |
+          git checkout -b "$BRANCH"
+          mkdir -p "$(dirname "$FILENAME")"
+          printf "%s" "$CONTENT" > "$FILENAME"
+          git add "$FILENAME"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(adr): add ${FILENAME}"
+          git push -u origin "$BRANCH"
+
+      - name: Open PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const head = core.getInput('branch') || process.env.BRANCH;
+            const { data: pr } = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `ADR: ${head}`,
+              head,
+              base: 'main',
+              body: '이슈 라벨 트리거로 자동 생성된 ADR 초안입니다. 리뷰 후 머지해주세요.'
+            });
+            core.info(`PR #${pr.number} opened`);
+        env:
+          BRANCH: ${{ steps.x.outputs.branch }}
