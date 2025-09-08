@@ -31,13 +31,24 @@ jobs:
             const title = rawTitle.replace(/^ADR:\s*/i, '').trim();
             const number = issue.number;
             const body = issue.body || "";
-
-            // helper: extract block under "### <heading>"
+            
+            // 1) 헤딩 텍스트를 정규식 안전하게 이스케이프
+            const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            
+            // 2) 이슈 폼 본문에서 ### <heading> 블록을 추출
             function extractField(heading) {
-              const re = new RegExp(String.raw`(?<=^###\\s+${heading}\\s*$)\\n([\\s\\S]*?)(?:\\n###\\s|$)`, 'm');
+              const h = esc(String(heading).trim());
+              // 헤딩 라인 다음부터 다음 헤딩 이전까지 캡처
+              const re = new RegExp(`^###\\s+${h}\\s*\\n([\\s\\S]*?)(?=\\n###\\s|$)`, 'm');
               const m = body.match(re);
               return m ? m[1].trim() : "";
             }
+            
+            // 3) "_No response_" 같은 기본값을 빈 값으로 정규화
+            const normalize = (v) => {
+              const s = (v || "").trim();
+              return /^_?No response_?$/i.test(s) ? "" : s;
+            };
 
             // ---- pick fields (Korean headings must match Issue Form)
             const H = {
