@@ -126,14 +126,29 @@ jobs:
           CONTENT: ${{ steps.x.outputs.content }}
           BRANCH:   ${{ steps.x.outputs.branch }}
         run: |
-          git checkout -b "$BRANCH"
+          set -euo pipefail
+          git fetch origin --prune
+
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "Remote branch exists; checkout tracking branch"
+            git checkout -B "$BRANCH" "origin/$BRANCH"
+          else
+            echo "Creating new branch $BRANCH"
+            git checkout -b "$BRANCH"
+          fi
+
           mkdir -p "$(dirname "$FILENAME")"
           printf "%s" "$CONTENT" > "$FILENAME"
           git add "$FILENAME"
+
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore(adr): add ${FILENAME}"
-          git push -u origin "$BRANCH"
+
+          # 커밋할 변경이 없으면 넘어감
+          git diff --cached --quiet || git commit -m "chore(adr): add/update ${FILENAME}"
+
+          # 먼저 일반 푸시, 실패하면 안전 강제 푸시로 폴백
+          git push --set-upstream origin "$BRANCH" || git push --force-with-lease origin "$BRANCH"
 
       - name: Open PR
         uses: actions/github-script@v7
