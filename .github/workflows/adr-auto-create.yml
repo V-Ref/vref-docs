@@ -27,115 +27,77 @@ jobs:
         with:
           script: |
             const issue = context.payload.issue;
-            const rawTitle = issue.title || "";
-            const title = rawTitle.replace(/^ADR:\s*/i, '').trim();
             const number = issue.number;
+            const titleText = (issue.title || "").trim();
             const body = issue.body || "";
             
-            // 1) 헤딩 텍스트를 정규식 안전하게 이스케이프
+            // heading escape + storage path만 파싱(디렉토리 결정을 위해 최소한만)
             const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            
-            // 2) 이슈 폼 본문에서 ### <heading> 블록을 추출
             function extractField(heading) {
               const h = esc(String(heading).trim());
-              // 헤딩 라인 다음부터 다음 헤딩 이전까지 캡처
               const re = new RegExp(`^###\\s+${h}\\s*\\n([\\s\\S]*?)(?=\\n###\\s|$)`, 'm');
               const m = body.match(re);
               return m ? m[1].trim() : "";
             }
-            
-            // 3) "_No response_" 같은 기본값을 빈 값으로 정규화
             const normalize = (v) => {
               const s = (v || "").trim();
               return /^_?No response_?$/i.test(s) ? "" : s;
             };
-
-            // ---- pick fields (Korean headings must match Issue Form)
-            const H = {
-              summary: "요약 (Summary)",
-              storage: "저장 위치 (Storage Path)",
-              scope: "적용 범위 (Scope)",
-              related: "관련 레포/이슈/PR",
-              context: "Context (배경/문제 정의)",
-              decision: "Decision (결정 사항)",
-              consequences: "Consequences (결과/파급효과)",
-              alternatives: "Alternatives Considered (대안)",
-              validation: "검증/지침 연계 (Validation)",
-              deciders: "Deciders / Reviewers"
-            };
-
-            const summary = extractField(H.summary) || title || "(no title)";
-            let storagePath = extractField(H.storage) || "org";
+            
+            // 저장 위치만 읽어서 디렉토리/ID prefix 결정
+            const STORAGE_HEADING = "저장 위치 (Storage Path)";
+            let storagePath = normalize(extractField(STORAGE_HEADING)) || "org";
             storagePath = storagePath.split("\n").map(s=>s.trim()).filter(Boolean)[0] || "org";
-            const scope = extractField(H.scope);
-            const related = extractField(H.related);
-            const contextSec = extractField(H.context);
-            const decisionSec = extractField(H.decision);
-            const consequencesSec = extractField(H.consequences);
-            const alternativesSec = extractField(H.alternatives);
-            const validationSec = extractField(H.validation);
-            const decidersSec = extractField(H.deciders);
-
-            // ---- directory & id prefix
+            
             const mapDir = (v) => {
               switch (v) {
-                case 'org': return { dir: 'docs/adr/org', idPrefix: 'O-ADR' };
-                case 'vref-be': return { dir: 'docs/adr/repos/vref-be', idPrefix: 'R-ADR-vref-be' };
-                case 'vref-fe': return { dir: 'docs/adr/repos/vref-fe', idPrefix: 'R-ADR-vref-fe' };
-                case 'vref-config': return { dir: 'docs/adr/repos/vref-config', idPrefix: 'R-ADR-vref-config' };
-                case 'vref-infra': return { dir: 'docs/adr/repos/vref-infra', idPrefix: 'R-ADR-vref-infra' };
-                case 'etc': return { dir: 'docs/adr/repos/etc', idPrefix: 'R-ADR-etc' };
-                default: return { dir: 'docs/adr/org', idPrefix: 'O-ADR' };
+                case 'org':          return { dir: 'docs/adr/org',               idPrefix: 'O-ADR' };
+                case 'vref-be':      return { dir: 'docs/adr/repos/vref-be',     idPrefix: 'R-ADR-vref-be' };
+                case 'vref-fe':      return { dir: 'docs/adr/repos/vref-fe',     idPrefix: 'R-ADR-vref-fe' };
+                case 'vref-config':  return { dir: 'docs/adr/repos/vref-config', idPrefix: 'R-ADR-vref-config' };
+                case 'vref-infra':   return { dir: 'docs/adr/repos/vref-infra',  idPrefix: 'R-ADR-vref-infra' };
+                case 'etc':          return { dir: 'docs/adr/repos/etc',         idPrefix: 'R-ADR-etc' };
+                default:             return { dir: 'docs/adr/org',               idPrefix: 'O-ADR' };
               }
             };
             const { dir, idPrefix } = mapDir(storagePath);
-
-            // ---- slug
-            const slug = (summary || `${storagePath}-proposal`)
-              .toLowerCase()
-              .replace(/[^a-z0-9가-힣\s-]/g, '')
-              .replace(/\s+/g, '-')
-              .replace(/-+/g, '-')
-              .replace(/^-|-$/g, '')
-              .slice(0, 80) || 'proposal';
-
-            // ---- id / filename
+            
+            // 파일명/ID/날짜
             const now = new Date();
             const year = now.getFullYear();
             const date = now.toISOString().slice(0,10);
             const adrId = `${idPrefix}-${year}-${String(number).padStart(4,'0')}`;
-            const filename = `${dir}/${adrId}-${slug}.md`;
-
-            const md = `# ${adrId}: ${summary}
-  
-              - **Status**: Accepted
-              - **Date**: ${date}
-              - **Deciders**: ${decidersSec || '(edit me)'}
-              - **Discussion**: #${number}
-              - **Scope**: ${storagePath === 'org' ? 'Org' : 'Repo'}
-              - **Related**: ${related || '-'}
             
-              ## Context
-              ${contextSec || '(add details from the issue if missing)'}
-              
-              ## Decision
-              ${decisionSec || '(fill in the chosen option and rationale)'}
-              
-              ## Consequences
-              ${consequencesSec || `- Positive:\n- Negative:`}
-              
-              ## Alternatives Considered
-              ${alternativesSec || '(list non-chosen options with reasons)'}
-              
-              ## Validation / Project Guidelines
-              ${validationSec || '(DoR/DoD, quality gates, guideline links)'}
-              `;
-
-
+            // slug는 제목 기준(요약 미사용)
+            const slug = (titleText || `${storagePath}-proposal`)
+              .toLowerCase()
+              .replace(/[^a-z0-9가-힣\s-]/g, '')
+              .replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+              .slice(0, 80) || 'proposal';
+            
+            const filename = `${dir}/${adrId}-${slug}.md`;
+            
+            // 메타 데이터 + 이슈 바디 원문 유지 + 하단 안내(표시용)
+            const md = `# ${adrId}: ${titleText}
+            
+            - **Status**: Accepted
+            - **Date**: ${date}
+            - **Discussion**: #${number}
+            - **Scope**: ${storagePath === 'org' ? 'Org' : 'Repo'}
+            - **Related**: -
+            
+            ---
+            
+            ${body.trim()}
+            
+            ---
+            
+            > Tracking issue: #${number}
+            `;
+            
             core.setOutput('filename', filename);
             core.setOutput('content', md);
             core.setOutput('branch', `adr/${adrId}`);
-
       - name: Create branch & commit
         env:
           FILENAME: ${{ steps.x.outputs.filename }}
@@ -180,15 +142,34 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const head = core.getInput('branch') || process.env.BRANCH;
-            const { data: pr } = await github.rest.pulls.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `ADR: ${head}`,
-              head,
-              base: 'main',
-              body: '이슈 라벨 트리거로 자동 생성된 ADR 초안입니다. 리뷰 후 머지해주세요.'
-            });
-            core.info(`PR #${pr.number} opened`);
+            const head = process.env.BRANCH;
+            const owner = context.repo.owner;
+            const repo  = context.repo.repo;
+            const n     = context.issue.number;
+            const compareUrl = `https://github.com/${owner}/${repo}/compare/main...${encodeURIComponent(head)}?expand=1`;
+            const prBody = [
+              '이슈 라벨 트리거로 자동 생성된 ADR 초안입니다. 리뷰 후 머지해주세요.',
+              '',
+              `Closes #${n}`
+            ].join('\n');
+
+            try {
+              const { data: pr } = await github.rest.pulls.create({
+                owner, repo, title: `ADR: ${head}`, head, base: 'main', body: prBody
+              });
+              core.info(`PR #${pr.number} opened`);
+            } catch (e) {
+              core.warning(`PR auto-create failed: ${e.message}`);
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: n,
+                body: [
+                  '🔒 PR 자동 생성이 차단되어 실패했습니다.',
+                  `브랜치는 준비되어 있습니다: \`${head}\`.`,
+                  `➡️ [여기](${compareUrl})를 눌러 수동으로 PR을 열어주세요.`,
+                  '',
+                  `PR 본문에 \`Closes #${n}\`를 포함하면 머지 시 이슈가 자동 종료됩니다.`
+                ].join('\n')
+              });
+            }
         env:
           BRANCH: ${{ steps.x.outputs.branch }}
