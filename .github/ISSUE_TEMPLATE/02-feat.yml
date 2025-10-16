@@ -5,17 +5,15 @@ title: "[FEAT] "
 labels: ["feat"]
 type: "Feature"
 body:
-#   Header
   - type: markdown
+    id: guide
     attributes:
       value: |
-        ## ✨ Feature 이슈 가이드
-        - **사용자 스토리 + 수용 기준(AC)** 중심으로 작성
-        - 영향도(UX, API, 데이터 모델 등) 명시, 우선순위·도메인·마일스톤 지정
-        - 체크리스트를 **Subtasks**를 이슈로 변환해 **양방향 연결** 유지
+          ## ✨ Feature 이슈 가이드
+          - **사용자 스토리 + 수용 기준(AC)** 중심으로 작성
+          - 영향도(UX, API, 데이터 모델 등) 명시, 우선순위·도메인·마일스톤 지정
+          - 체크리스트를 **Subtasks**를 이슈로 변환해 **양방향 연결** 유지
 
-
-#   0) 상위 연결(선택)
   - type: input
     id: parent_task
     attributes:
@@ -23,8 +21,7 @@ body:
       description: 상위 Task 이슈 번호(#42 형식)
       placeholder: "#42"
 
-#   Body
-#   1) 배경/문제
+
   - type: textarea
     id: context
     attributes:
@@ -36,7 +33,6 @@ body:
     validations:
       required: true
 
-#   2) 사용자 스토리
   - type: textarea
     id: user_story
     attributes:
@@ -46,7 +42,7 @@ body:
         - As a <role>, I want <capability> so that <benefit>.
         - 시나리오 예: GIVEN/WHEN/THEN ...
 
-#   3) 제안 요약/대안
+
   - type: textarea
     id: proposal
     attributes:
@@ -58,7 +54,7 @@ body:
         - 근거: ...
         - 트레이드오프: ...
 
-#   4) 영향도: UX/화면 & 접근성 & API
+
   - type: textarea
     id: ux
     attributes:
@@ -71,7 +67,6 @@ body:
         - DB/캐시/마이그레이션
         - 성능·보안·비용 영향
 
-#   5) 관련 아키텍처 결정 기록(ADR)
   - type: input
     id: adr
     attributes:
@@ -89,8 +84,6 @@ body:
         - [ ] p95 응답 < 300ms (if BE)
 
 
-  # Footer
-  # 1) 스프린트/마일스톤
   - type: input
     id: milestone
     attributes:
@@ -98,22 +91,21 @@ body:
       description: "이름 규칙 예시: 2025-09 Sprint 1 / v0.3.0 / 2025-W36"
       placeholder: "2025-09 Sprint 1"
 
-  # 2) 우선순위/규모/도메인
   - type: dropdown
     id: priority
     attributes:
       label: 🚦 우선순위
       options: [P0-urgent, P1-high, P2-med, P3-low]
-      validations: { required: true }
+    validations: { required: true }
 
   - type: dropdown
     id: size
     attributes:
       label: Size
       options: [ "S", "M", "L" ]
-      validations: { required: true }
+    validations: { required: true }
 
-  # 3) 준비 정의 (DoR)
+
   - type: checkboxes
     id: dor
     attributes:
@@ -127,7 +119,6 @@ body:
         - label: 의존/리스크 식별
         - label: 우선순위/마일스톤 지정
 
-  # 4) 완료 정의(DoD)
 
   - type: checkboxes
     id: dod
@@ -140,7 +131,6 @@ body:
         - label: 라벨/연결(Closes/Fixes) 정리
         - label: 관측(로그/모니터링/알람) 확인
 
-  # 5) Subtasks, TODOs
   - type: textarea
     id: subtasks
     attributes:
@@ -154,7 +144,7 @@ body:
   - type: textarea
     id: references
     attributes:
-    label: 📚 참고 자료
-    placeholder: |
-      - RFC 7231 Hypertext Transfer Protocol
-      - Spring Boot Docs: ...
+      label: 📚 참고 자료
+      placeholder: |
+        - RFC 7231 Hypertext Transfer Protocol
+        - Spring Boot Docs: ...
